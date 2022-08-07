@@ -1,0 +1,92 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+
+import os, sys
+
+
+def usage():
+    print 'Usage: python pdftk2pdfmarks.py PDFTK-bookmark-file-input PDFMARKS-bookmark-file-output'
+
+
+def cleanup(s):
+#   cleanup pairs: replace odd with even (many things not considered)
+    i = ['\xad','-', ':',' -', '(','[', ')',']', '\n','']
+    for j in range(len(i)/2):
+        s = s.replace(i[2*j-2], i[2*j-1])
+    return s
+
+
+def main(data):
+
+    if len(data) < 2:
+        usage()
+    else:
+
+#       open pkftk bookmark file (from `pdftk <inputpdf> dump_data_utf8 <bookmarks file>`)
+        f = open(data[0], 'r')
+
+#       open pdfmarks bookmark file for writing/appending
+        pdfmarks = open(data[1], 'a')
+
+        try:
+            l = []
+            for line in f:
+
+#               put node levels in list l
+                if line[:13] == 'BookmarkLevel':
+                    l.append(int(line.split(':')[1]))
+
+            j = [0] * len(l)
+
+#           most important part: convert levels (pdftk "notation") to subordinate count (pdfmarks "notation")
+            for u, v in enumerate(l):
+                for other in l[u+1:]:
+                    if other == v+1:
+                        j[u] += 1
+                    elif other == v:
+                        break
+
+#           now write to pdfmarks file (self-explainatory)
+            i = 0
+            f.seek(0)
+            for line in f:
+
+                m = line.split(':')[0]
+                n = line[len(m)+2:-1]
+
+                if m[:8] == 'Bookmark':
+
+                    if i == -1 : pdfmarks.write(' /DOCINFO pdfmark'); i += 1
+
+                    if m == 'BookmarkTitle':
+                        pdfmarks.write('\n[ /Title (%s)' % (cleanup(n)))
+
+                    if m == 'BookmarkLevel':
+                        if not j[i] == 0:
+                            pdfmarks.write(' /Count %s' % (j[i]))
+                        i += 1
+
+                    if m == 'BookmarkPageNumber':
+                        pdfmarks.write(' /Page %s /OUT pdfmark' % (n))
+
+                else:
+                    if m == 'InfoKey':
+                        if i == 0:
+                            pdfmarks.write('[')
+                        pdfmarks.write(' /%s' % (n))
+                    if m == 'InfoValue':
+                        pdfmarks.write(' (%s)\n' % (cleanup(n))); i = -1
+
+        except Exception, e:
+            print e
+
+        pdfmarks.close()
+        f.close()
+
+
+if __name__ == "__main__":
+
+    try:
+        main(sys.argv[1:])
+    except:
+        usage()
